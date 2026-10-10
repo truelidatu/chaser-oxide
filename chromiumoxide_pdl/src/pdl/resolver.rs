@@ -24,7 +24,10 @@ pub fn resolve_pdl(path: &Path, input: &str) -> Result<String, Error> {
             };
 
             // Remove the license header
-            let Some((_, content)) = content.split_once("\n\n") else {
+            let Some((_, content)) = content
+                .split_once("\r\n\r\n")
+                .or_else(|| content.split_once("\n\n"))
+            else {
                 bail!("Failed to split license header from file {}", name);
             };
 

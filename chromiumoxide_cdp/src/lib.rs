@@ -152,8 +152,12 @@ impl fmt::Display for StackTrace {
 #[cfg(test)]
 mod tests {
     use chromiumoxide_types::Message;
+    use serde_json::json;
 
-    use super::cdp::CdpEventMessage;
+    use super::cdp::browser_protocol::network::{
+        EventRequestWillBeSentExtraInfo, PrivateNetworkRequestPolicy,
+    };
+    use super::cdp::{CdpEvent, CdpEventMessage};
 
     // This makes sure we can parse arbitrary numbers (timestamp) as f64
     // and that the Message untagged union works core
@@ -164,5 +168,128 @@ mod tests {
         let event = serde_json::from_str::<Message<CdpEventMessage>>(raw).unwrap();
 
         assert!(matches!(event, Message::Event(_)));
+    }
+
+    #[test]
+    fn request_extra_info_accepts_both_network_policy_field_names() {
+        for field_name in [
+            "privateNetworkRequestPolicy",
+            "localNetworkAccessRequestPolicy",
+        ] {
+            let mut raw = json!({
+                "method": "Network.requestWillBeSentExtraInfo",
+                "params": {
+                    "requestId": "53440.967",
+                    "associatedCookies": [],
+                    "headers": {},
+                    "connectTiming": { "requestTime": 2066617.55733 },
+                    "clientSecurityState": {
+                        "initiatorIsSecureContext": true,
+                        "initiatorIPAddressSpace": "Loopback"
+                    },
+                    "siteHasCookieInOtherPartition": false
+                },
+                "sessionId": "197B7952BA2E8B256D6EB67EDFA755EF"
+            });
+            raw["params"]["clientSecurityState"][field_name] = json!("PermissionBlock");
+
+            let message: Message<CdpEventMessage> = serde_json::from_value(raw).unwrap();
+            let Message::Event(event) = message else {
+                panic!("expected a CDP event");
+            };
+            let CdpEvent::NetworkRequestWillBeSentExtraInfo(extra_info) = event.params else {
+                panic!("expected requestWillBeSentExtraInfo");
+            };
+            let state = extra_info.client_security_state.unwrap();
+            assert_eq!(
+                state.private_network_request_policy,
+                PrivateNetworkRequestPolicy::PermissionBlock
+            );
+            assert_eq!(
+                serde_json::to_value(state).unwrap()["privateNetworkRequestPolicy"],
+                "PermissionBlock"
+            );
+        }
+    }
+
+    #[test]
+    fn request_extra_info_accepts_cookies_with_new_network_policy_field() {
+        let raw = json!({
+            "method": "Network.requestWillBeSentExtraInfo",
+            "params": {
+                "requestId": "28088.41",
+                "associatedCookies": [
+                    {
+                        "cookie": {
+                            "name": "session",
+                            "value": "placeholder",
+                            "domain": "example.test",
+                            "path": "/",
+                            "expires": -1,
+                            "size": 18,
+                            "httpOnly": false,
+                            "secure": false,
+                            "session": true,
+                            "priority": "Medium",
+                            "sourceScheme": "Secure",
+                            "sourcePort": 443
+                        },
+                        "blockedReasons": [],
+                        "exemptionReason": "None"
+                    },
+                    {
+                        "cookie": {
+                            "name": "lang",
+                            "value": "EN",
+                            "domain": "example.test",
+                            "path": "/",
+                            "expires": -1,
+                            "size": 6,
+                            "httpOnly": false,
+                            "secure": false,
+                            "session": true,
+                            "priority": "Medium",
+                            "sourceScheme": "Secure",
+                            "sourcePort": 443
+                        },
+                        "blockedReasons": [],
+                        "exemptionReason": "None"
+                    }
+                ],
+                "headers": {
+                    ":authority": "example.test",
+                    ":method": "GET",
+                    ":path": "/image.jpg",
+                    ":scheme": "https",
+                    "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                    "accept-encoding": "gzip, deflate, br, zstd",
+                    "accept-language": "en-US",
+                    "cookie": "session=placeholder; lang=EN",
+                    "priority": "i",
+                    "referer": "https://example.test/",
+                    "sec-fetch-dest": "image",
+                    "sec-fetch-mode": "no-cors",
+                    "sec-fetch-site": "same-origin",
+                    "user-agent": "Chrome/154.0.0.0"
+                },
+                "connectTiming": { "requestTime": 2068420.07852 },
+                "clientSecurityState": {
+                    "initiatorIsSecureContext": true,
+                    "initiatorIPAddressSpace": "Loopback",
+                    "localNetworkAccessRequestPolicy": "PermissionBlock"
+                },
+                "siteHasCookieInOtherPartition": false
+            },
+            "sessionId": "test-session"
+        });
+
+        let extra_info: EventRequestWillBeSentExtraInfo =
+            serde_json::from_value(raw["params"].clone()).unwrap();
+        assert_eq!(extra_info.associated_cookies.len(), 2);
+        let raw = serde_json::to_string(&raw).unwrap();
+        assert!(matches!(
+            serde_json::from_str::<Message<CdpEventMessage>>(&raw).unwrap(),
+            Message::Event(_)
+        ));
     }
 }

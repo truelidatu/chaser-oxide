@@ -541,11 +541,25 @@ impl Generator {
         }
     }
 
-    /// Entry point to modify the builder for a struct manually
-    ///
-    /// This is useful to add utility fields that should not be serialized by
-    /// make things easier
+    /// Entry point for compatibility attributes and utility fields that are
+    /// not represented in the pinned PDL.
     fn apply_struct_fixup(&self, builder: &mut Builder, dt: &DomainDatatype) {
+        if dt.raw_name() == "Network.ClientSecurityState" {
+            if let Some((meta, _)) = builder
+                .fields
+                .iter_mut()
+                .find(|(_, field)| field.name == "privateNetworkRequestPolicy")
+            {
+                // Chrome renamed this field; accept both names while retaining the
+                // pinned protocol's public field and serialization format.
+                let original = meta.clone();
+                *meta = quote! {
+                    #[serde(alias = "localNetworkAccessRequestPolicy")]
+                    #original
+                };
+            }
+        }
+
         if dt.raw_name() == "Runtime.evaluate" {
             let field = FieldDefinition {
                 name: "eval_as_function_fallback".to_string(),

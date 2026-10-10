@@ -73238,6 +73238,7 @@ pub mod browser_protocol {
             #[serde(rename = "initiatorIPAddressSpace")]
             #[serde(deserialize_with = "super::super::de::deserialize_from_str")]
             pub initiator_ip_address_space: IpAddressSpace,
+            #[serde(alias = "localNetworkAccessRequestPolicy")]
             #[serde(rename = "privateNetworkRequestPolicy")]
             #[serde(deserialize_with = "super::super::de::deserialize_from_str")]
             pub private_network_request_policy: PrivateNetworkRequestPolicy,
